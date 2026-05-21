@@ -1,0 +1,661 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Flo Detector — Sensor Candidate Analysis</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --dark:    #0D2B3E;
+    --teal:    #0A7E8C;
+    --teal2:   #12A5B5;
+    --slate:   #2E4A5A;
+    --bg:      #F2F7F9;
+    --white:   #FFFFFF;
+    --text:    #1A2F3C;
+    --muted:   #5A7A8A;
+    --border:  #C8DDE5;
+    --penalty: #C0392B;
+    --good:    #1E7A4E;
+    --warn:    #BA7517;
+    --fw-bg:   #E8F4F6;
+    --fw-text: #0A5F6A;
+    --inf-bg:  #F7F7F7;
+    --inf-text:#7A8E96;
+    --part-bg: #FFF8EC;
+    --part-text:#8A5A00;
+    --stars-4: #1E7A4E;
+    --stars-3: #2A9D8F;
+    --stars-2: #BA7517;
+    --stars-1: #C0392B;
+  }
+
+  body {
+    font-family: 'IBM Plex Sans', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+  }
+
+  /* ── Header ── */
+  .header {
+    background: var(--dark);
+    padding: 28px 32px 24px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 16px;
+    border-bottom: 2px solid var(--teal);
+  }
+  .header-left { display: flex; flex-direction: column; gap: 4px; }
+  .header-eyebrow {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.12em;
+    color: var(--teal2);
+    text-transform: uppercase;
+  }
+  .header-title {
+    font-size: 22px;
+    font-weight: 600;
+    color: #fff;
+    line-height: 1.2;
+  }
+  .header-sub {
+    font-size: 12px;
+    color: #7BABB8;
+    margin-top: 2px;
+    font-style: italic;
+  }
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 16px;
+    align-items: center;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 10.5px;
+    color: #7BABB8;
+    font-family: 'IBM Plex Mono', monospace;
+  }
+  .legend-dot {
+    width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+  }
+  .ld-fw    { background: var(--teal2); }
+  .ld-part  { background: var(--warn); }
+  .ld-inf   { background: #7A8E96; }
+  .ld-base  { background: #3A6070; }
+
+  /* ── Table wrapper ── */
+  .table-wrap {
+    overflow-x: auto;
+    padding: 20px 24px 40px;
+  }
+
+  table {
+    border-collapse: separate;
+    border-spacing: 0;
+    font-size: 11px;
+    min-width: 1380px;
+    width: 100%;
+    background: var(--white);
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 2px 16px rgba(13,43,62,0.10);
+  }
+
+  /* ── Column headers ── */
+  thead th {
+    background: var(--dark);
+    color: #A8C8D4;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 9.5px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding: 10px 10px 9px;
+    text-align: left;
+    white-space: nowrap;
+    border-bottom: 2px solid var(--teal);
+    position: sticky;
+    top: 82px;
+    z-index: 10;
+  }
+  thead th.th-score { color: var(--teal2); min-width: 48px; }
+  thead th.th-name  { min-width: 160px; color: #fff; }
+  thead th.th-sensor { min-width: 130px; }
+  thead th.col-group-left { border-left: 2px solid var(--teal); }
+  thead th.col-score-group { border-left: 1px solid #1A4A5C; }
+
+  /* ── Section dividers ── */
+  tr.divider td {
+    background: var(--dark);
+    color: var(--teal2);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 9px;
+    font-weight: 500;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 5px 10px;
+    border-top: 1px solid var(--teal);
+    border-bottom: 1px solid var(--teal);
+  }
+
+  /* ── Base row styles ── */
+  tbody tr { transition: background 0.12s; }
+  tbody tr:not(.divider):not(.baseline-row):hover td { background: #EEF5F8; }
+
+  tbody td {
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: middle;
+    line-height: 1.4;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+
+  /* ── Row type variants ── */
+  tr.baseline-row td { background: #EDF2F5; }
+  tr.fw-row td       { background: var(--fw-bg); }
+  tr.inf-row td      { background: var(--inf-bg); color: var(--inf-text); }
+  tr.part-row td     { background: var(--part-bg); }
+
+  /* Column group separators */
+  td.col-group-left, th.col-group-left { border-left: 2px solid var(--teal) !important; }
+  td.col-score-group { border-left: 1px solid var(--border); }
+
+  /* ── Total score cell ── */
+  .total-score {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text);
+  }
+  .total-score.best  { color: var(--good); }
+  .total-score.fw    { color: var(--fw-text); }
+  .total-score.high  { color: var(--penalty); }
+
+  /* ── Name cell ── */
+  .name-cell { font-weight: 600; font-size: 11px; }
+  .fw-row .name-cell  { color: var(--fw-text); }
+  .inf-row .name-cell { color: var(--inf-text); }
+  .part-row .name-cell { color: var(--part-text); }
+
+  /* ── Sensor cell ── */
+  .sensor-cell { font-size: 10px; color: var(--muted); font-style: italic; }
+  .inf-row .sensor-cell { color: #9AAFB8; }
+
+  /* ── Score tags (C1–C6) ── */
+  .ctag {
+    display: inline-block;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 9px;
+    font-weight: 500;
+    padding: 2px 5px;
+    border-radius: 3px;
+    line-height: 1;
+    white-space: nowrap;
+  }
+  .ct-present { background: #DDE8ED; color: var(--slate); }
+  .ct-penalty { background: #FDECEA; color: var(--penalty); }
+  .ct-c3ok    { background: #E6F4ED; color: var(--good); }
+  .ct-fn      { background: #D6EEF1; color: var(--fw-text); }
+
+  /* ── COGS delta ── */
+  .mono { font-family: 'IBM Plex Mono', monospace; font-size: 10px; }
+  .dlo  { color: var(--good); }
+  .dhi  { color: var(--penalty); }
+  .dash { color: var(--border); }
+
+  /* ── Margin bars ── */
+  .margin-wrap { display: flex; flex-direction: column; gap: 1px; }
+  .margin-val { font-family: 'IBM Plex Mono', monospace; font-size: 10px; }
+  .margin-delta { font-size: 9px; color: var(--muted); }
+  .bar-track {
+    height: 3px;
+    background: var(--border);
+    border-radius: 99px;
+    overflow: hidden;
+    width: 100%;
+    min-width: 50px;
+    margin-top: 2px;
+  }
+  .bar-fill { height: 100%; border-radius: 99px; }
+
+  /* ── Feasible badge ── */
+  .badge {
+    display: inline-block;
+    font-size: 9px;
+    font-weight: 600;
+    padding: 2px 6px;
+    border-radius: 3px;
+    white-space: nowrap;
+  }
+  .b-yes  { background: #D4EDE0; color: #0D6B3A; }
+  .b-no   { background: #FDECEA; color: var(--penalty); }
+  .b-part { background: #FEF3DC; color: #8A5A00; }
+  .b-fw   { background: #D6EEF1; color: var(--fw-text); }
+
+  /* ── COGS viability stars ── */
+  .stars { font-size: 14px; letter-spacing: 1px; line-height: 1; }
+  .s4 { color: var(--stars-4); }
+  .s3 { color: var(--stars-3); }
+  .s2 { color: var(--stars-2); }
+  .s1 { color: var(--stars-1); }
+  .s-na { font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: var(--muted); }
+
+  /* ── Footer legend ── */
+  .footer {
+    padding: 0 24px 32px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 24px;
+    font-size: 10px;
+    color: var(--muted);
+    font-family: 'IBM Plex Mono', monospace;
+  }
+  .footer strong { color: var(--text); }
+  .footer .sep { color: var(--border); }
+
+  /* ── Scrollbar ── */
+  .table-wrap::-webkit-scrollbar { height: 6px; }
+  .table-wrap::-webkit-scrollbar-track { background: var(--bg); }
+  .table-wrap::-webkit-scrollbar-thumb { background: var(--border); border-radius: 99px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-left">
+    <span class="header-eyebrow">Moen Flo Detector · Product Analysis</span>
+    <span class="header-title">New Sensor Candidate Viability Grid</span>
+    <span class="header-sub">Scored across 6 dimensions · COGS delta vs. MAP $56.36 and list $88.00 · Base COGS $14.23</span>
+  </div>
+  <div class="legend">
+    <div class="legend-item"><div class="legend-dot ld-fw"></div>Flo-native (firmware)</div>
+    <div class="legend-item"><div class="legend-dot ld-part"></div>Partial feasibility</div>
+    <div class="legend-item"><div class="legend-dot ld-inf"></div>Not sensor-feasible</div>
+    <div class="legend-item"><div class="legend-dot ld-base"></div>Baseline</div>
+  </div>
+</div>
+
+<div class="table-wrap">
+<table>
+  <thead>
+    <tr>
+      <th class="th-score">Total</th>
+      <th class="th-name">Substance</th>
+      <th class="col-group-left col-score-group" style="width:42px">C1<br>×1</th>
+      <th class="col-score-group" style="width:42px">C2<br>×1</th>
+      <th class="col-score-group" style="width:42px">C3<br>16−r</th>
+      <th class="col-score-group" style="width:42px">C4<br>×1</th>
+      <th class="col-score-group" style="width:42px">C5<br>×0.5</th>
+      <th class="col-score-group" style="width:42px">C6<br>×0.5</th>
+      <th class="col-group-left th-sensor">Sensor technology</th>
+      <th class="col-group-left" style="min-width:95px">COGS delta<br>low / high</th>
+      <th style="min-width:100px">New COGS<br>low / high</th>
+      <th class="col-group-left" style="min-width:110px">MAP margin<br>low / high</th>
+      <th style="min-width:110px">List margin<br>low / high</th>
+      <th style="width:52px">Feasible</th>
+      <th class="col-group-left" style="width:62px">COGS<br>viability</th>
+    </tr>
+  </thead>
+  <tbody>
+
+  <!-- Baseline -->
+  <tr class="baseline-row">
+    <td class="mono">—</td>
+    <td class="name-cell">Baseline (no sensor)</td>
+    <td class="col-group-left col-score-group mono">—</td><td class="col-score-group mono">—</td><td class="col-score-group mono">—</td><td class="col-score-group mono">—</td><td class="col-score-group mono">—</td><td class="col-score-group mono">—</td>
+    <td class="col-group-left sensor-cell">Current Flo detector</td>
+    <td class="col-group-left mono">—</td><td class="mono">$14.23</td>
+    <td class="col-group-left mono">74.8%</td><td class="mono">83.8%</td>
+    <td></td><td class="col-group-left"></td>
+  </tr>
+
+  <!-- Divider: Top 10 -->
+  <tr class="divider"><td colspan="15">▸ &nbsp; Ranks 0 – 8 &nbsp; (top 10)</td></tr>
+
+  <!-- Flo-native cluster -->
+  <tr class="fw-row">
+    <td class="total-score fw">0.0</td>
+    <td class="name-cell">Flo-native cluster</td>
+    <td class="col-group-left col-score-group"><span class="ctag ct-fn">FN</span></td><td class="col-score-group"><span class="ctag ct-fn">FN</span></td><td class="col-score-group"><span class="ctag ct-fn">FN</span></td><td class="col-score-group"><span class="ctag ct-fn">FN</span></td><td class="col-score-group"><span class="ctag ct-fn">FN</span></td><td class="col-score-group"><span class="ctag ct-fn">0★</span></td>
+    <td class="col-group-left sensor-cell">Firmware / algorithm only — humidity, mold risk, dew point, freeze prediction, water intrusion</td>
+    <td class="col-group-left mono">$0.00</td><td class="mono">$14.23</td>
+    <td class="col-group-left mono">74.8%</td><td class="mono">83.8%</td>
+    <td><span class="badge b-fw">FW</span></td>
+    <td class="col-group-left"><span class="stars s4">★★★★</span></td>
+  </tr>
+
+  <!-- Sewage gas / H2S -->
+  <tr>
+    <td class="total-score best">23.5</td>
+    <td class="name-cell">Sewage gas / H2S</td>
+    <td class="col-group-left col-score-group"><span class="ctag ct-present">9</span></td><td class="col-score-group"><span class="ctag ct-present">3</span></td><td class="col-score-group"><span class="ctag ct-c3ok">−</span></td><td class="col-score-group"><span class="ctag ct-present">9</span></td><td class="col-score-group"><span class="ctag ct-present">2</span></td><td class="col-score-group"><span class="ctag ct-present">0.5</span></td>
+    <td class="col-group-left sensor-cell">Electrochemical H2S (Alphasense, Winsen)</td>
+    <td class="col-group-left mono"><span class="dlo">+$4.00</span> / <span class="dhi">+$10.00</span></td><td class="mono">$18.23 / $24.23</td>
+    <td class="col-group-left"><div class="margin-wrap"><div class="margin-val">67.7% / 57.0%</div><div class="margin-delta">−7.1 to −17.8 pts</div><div class="bar-track"><div class="bar-fill" style="width:67.7%;background:#2A9D8F"></div></div></div></td>
+    <td><div class="margin-wrap"><div class="margin-val">79.3% / 72.5%</div><div class="margin-delta">−4.5 to −11.3 pts</div><div class="bar-track"><div class="bar-fill" style="width:79.3%;background:#2A9D8F"></div></div></div></td>
+    <td><span class="badge b-yes">Yes</span></td>
+    <td class="col-group-left"><span class="stars s2">★★</span></td>
+  </tr>
+
+  <!-- Carbon monoxide acute -->
+  <tr>
+    <td class="total-score">31.0</td>
+    <td class="name-cell">Carbon monoxide (acute)</td>
+    <td class="col-group-left col-score-group"><span class="ctag ct-present">7</span></td><td class="col-score-group"><span class="ctag ct-penalty">P</span></td><td class="col-score-group"><span class="ctag ct-c3ok">−</span></td><td class="col-score-group"><span class="ctag ct-present">2</span></td><td class="col-score-group"><span class="ctag ct-penalty">P</span></td><td class="col-score-group"><span class="ctag ct-penalty">P</span></td>
+    <td class="col-group-left sensor-cell">Electrochemical CO (Figaro, Sensirion)</td>
+    <td class="col-group-left mono"><span class="dlo">+$3.00</span> / <span class="dhi">+$7.00</span></td><td class="mono">$17.23 / $21.23</td>
+    <td class="col-group-left"><div class="margin-wrap"><div class="margin-val">69.4% / 62.3%</div><div class="margin-delta">−5.4 to −12.5 pts</div><div class="bar-track"><div class="bar-fill" style="width:69.4%;background:#2A9D8F"></div></div></div></td>
+    <td><div class="margin-wrap"><div class="margin-val">80.4% / 75.9%</div><div class="margin-delta">−3.4 to −7.9 pts</div><div class="bar-track"><div class="bar-fill" style="width:80.4%;background:#2A9D8F"></div></div></div></td>
+    <td><span class="badge b-yes">Yes</span></td>
+    <td class="col-group-left"><span class="stars s3">★★★</span></td>
+  </tr>
+
+  <!-- VOCs broad -->
+  <tr>
+    <td class="total-score">32.0</td>
+    <td class="name-cell">VOCs (broad)</td>
+    <td class="col-group-left col-score-group"><span class="ctag ct-present">6</span></td><td class="col-score-group"><span class="ctag ct-penalty">P</span></td><td class="col-score-group"><span class="ctag ct-c3ok">−</span></td><td class="col-score-group"><span class="ctag ct-present">4</span></td><td class="col-score-group"><span class="ctag ct-penalty">P</span></td><td class="col-score-group"><span class="ctag ct-penalty">P</span></td>
+    <td class="col-group-left sensor-cell">Metal oxide MOX (Sensirion SGP40, Bosch BME688)</td>
+    <td class="col-group-left mono"><span class="dlo">+$1.50</span> / <span class="dhi">+$4.00</span></td><td class="mono">$15.73 / $18.23</td>
+    <td class="col-group-left"><div class="margin-wrap"><div class="margin-val">72.1% / 67.7%</div><div class="margin-delta">−2.7 to −7.1 pts</div><div class="bar-track"><div class="bar-fill" style="width:72.1%;background:#2A9D8F"></div></div></div></td>
+    <td><div class="margin-wrap"><div class="margin-val">82.1% / 79.3%</div><div class="margin-delta">−1.7 to −4.5 pts</div><div class="bar-track"><div class="bar-fill" style="width:82.1%;background:#2A9D8F"></div></div></div></td>
+    <td><span class="badge b-yes">Yes</span></td>
+    <td class="col-group-left"><span class="stars s3">★★★</span></td>
+  </tr>
+
+  <!-- Radon -->
+  <tr>
+    <td class="total-score">33.0</td>
+    <td class="name-cell">Radon gas</td>
+    <td class="col-group-left col-score-group"><span class="ctag ct-present">5</span></td><td class="col-score-group"><span class="ctag ct-present">1</span></td><td class="col-score-group"><span class="ctag ct-present">13</span></td><td class="col-score-group"><span class="ctag ct-present">3</span></td><td class="col-score-group"><span class="ctag ct-penalty">P</span></td><td class="col-score-group"><span class="ctag ct-penalty">P</span></td>
+    <td class="col-group-left sensor-cell">Silicon photodiode / pulse ionization (Airthings-style)</td>
+    <td class="col-group-left mono"><span class="dlo">+$8.00</span> / <span class="dhi">+$18.00</span></td><td class="mono">$22.23 / $32.23</td>
+    <td class="col-group-left"><div class="margin-wrap"><div class="margin-val">60.6% / 42.8%</div><div class="margin-delta">−14.2 to −32.0 pts</div><div class="bar-track"><div class="bar-fill" style="width:60.6%;background:#BA7517"></div></div></div></td>
+    <td><div class="margin-wrap"><div class="margin-val">74.7% / 63.4%</div><div class="margin-delta">−9.1 to −20.4 pts</div><div class="bar-track"><div class="bar-fill" style="width:74.7%;background:#BA7517"></div></div></div></td>
+    <td><span class="badge b-yes">Yes</span></td>
+    <td class="col-group-left"><span class="stars s1">★</span></td>
+  </tr>
+
+  <!-- Lead broad - infeasible -->
+  <tr class="inf-row">
+    <td class="total-score mono" style="color:var(--inf-text)">36.0</td>
+    <td class="name-cell">Lead contamination (broad)</td>
+    <td class="col-group-left col-score-group"><span class="ctag ct-present">3</span></td><td class="col-score-group"><span class="ctag ct-penalty">P</span></td><td class="col-score-group"><span class="ctag ct-c3ok">−</span></td><td class="col-score-group"><span class="ctag ct-penalty">P</span></td><td class="col-score-group"><span class="ctag ct-penalty">P</span></td><td class="col-score-group"><span class="ctag ct-penalty">P</span></td>
+    <td class="col-group-left sensor-cell">Not feasible in this form factor</td>
+    <td class="col-group-left mono dash">—</td><td class="mono dash">—</td>
+    <td class="col-group-left mono dash">—</td><td class="mono dash">—</td>
+    <td><span class="badge b-no">No</span></td>
+    <td class="col-group-left"><span class="s-na">N/A</span></td>
+  </tr>
+
+  <!-- Formaldehyde -->
+  <tr>
+    <td class="total-score">38.0</td>
+    <td class="name-cell">Formaldehyde</td>
+    <td class="col-group-left col-score-group"><span class="ctag ct-penalty">P</span></td><td class="col-score-group"><span class="ctag ct-present">2</span></td><td class="col-score-group"><span class="ctag ct-present">10</span></td><td class="col-score-group"><span class="ctag ct-present">8</span></td><td class="col-score-group"><span class="ctag ct-present">1.5</span></td><td class="col-score-group"><span class="ctag ct-penalty">P</span></td>
+    <td class="col-group-left sensor-cell">Electrochemical HCHO (Sensirion SFA30, Dart)</td>
+    <td class="col-group-left mono"><span class="dlo">+$3.50</span> / <span class="dhi">+$8.00</span></td><td class="mono">$17.73 / $22.23</td>
+    <td class="col-group-left"><div class="margin-wrap"><div class="margin-val">68.5% / 60.6%</div><div class="margin-delta">−6.3 to −14.2 pts</div><div class="bar-track"><div class="bar-fill" style="width:68.5%;background:#2A9D8F"></div></div></div></td>
+    <td><div class="margin-wrap"><div class="margin-val">79.9% / 74.7%</div><div class="margin-delta">−3.9 to −9.1 pts</div><div class="bar-track"><div class="bar-fill" style="width:79.9%;background:#2A9D8F"></div></div></div></td>
+    <td><span class="badge b-yes">Yes</span></td>
+    <td class="col-group-left"><span class="stars s2">★★</span></td>
+  </tr>
+
+  <!-- CO2 -->
+  <tr>
+    <td class="total-score">38.0</td>
+    <td class="name-cell">CO2 levels</td>
+    <td class="col-group-left col-score-group"><span class="ctag ct-penalty">P</span></td><td class="col-score-group"><span class="ctag ct-penalty">P</span></td><td class="col-score-group"><span class="ctag ct-c3ok">−</span></td><td class="col-score-group"><span class="ctag ct-present">5</span></td><td class="col-score-group"><span class="ctag ct-penalty">P</span></td><td class="col-score-group"><span class="ctag ct-penalty">P</span></td>
+    <td class="col-group-left sensor-cell">NDIR CO2 (Sensirion SCD40, Senseair)</td>
+    <td class="col-group-left mono"><span class="dlo">+$6.00</span> / <span class="dhi">+$14.00</span></td><td class="mono">$20.23 / $28.23</td>
+    <td class="col-group-left"><div class="margin-wrap"><div class="margin-val">64.1% / 49.9%</div><div class="margin-delta">−10.7 to −24.9 pts</div><div class="bar-track"><div class="bar-fill" style="width:64.1%;background:#BA7517"></div></div></div></td>
+    <td><div class="margin-wrap"><div class="margin-val">77.0% / 67.9%</div><div class="margin-delta">−6.8 to −15.9 pts</div><div class="bar-track"><div class="bar-fill" style="width:77.0%;background:#BA7517"></div></div></div></td>
+    <td><span class="badge b-yes">Yes</span></td>
+    <td class="col-group-left"><span class="stars s2">★★</span></td>
+  </tr>
+
+  <!-- Lead in water - infeasible -->
+  <tr class="inf-row">
+    <td class="total-score mono" style="color:var(--inf-text)">39.0</td>
+    <td class="name-cell">Lead in water</td>
+    <td class="col-group-left col-score-group"><span class="ctag ct-penalty">P</span></td><td class="col-score-group"><span class="ctag ct-present">6</span></td><td class="col-score-group"><span class="ctag ct-present">9</span></td><td class="col-score-group"><span class="ctag ct-present">7</span></td><td class="col-score-group"><span class="ctag ct-present">5</span></td><td class="col-score-group"><span class="ctag ct-present">1</span></td>
+    <td class="col-group-left sensor-cell">Not feasible in area detector — belongs on Shutoff</td>
+    <td class="col-group-left mono dash">—</td><td class="mono dash">—</td>
+    <td class="col-group-left mono dash">—</td><td class="mono dash">—</td>
+    <td><span class="badge b-no">No</span></td>
+    <td class="col-group-left"><span class="s-na">N/A</span></td>
+  </tr>
+
+  <!-- Pesticide - infeasible -->
+  <tr class="inf-row">
+    <td class="total-score mono" style="color:var(--inf-text)">39.0</td>
+    <td class="name-cell">Pesticide / herbicide drift</td>
+    <td class="col-group-left col-score-group"><span class="ctag ct-penalty">P</span></td><td class="col-score-group"><span class="ctag ct-present">8</span></td><td class="col-score-group"><span class="ctag ct-c3ok">−</span></td><td class="col-score-group"><span class="ctag ct-penalty">P</span></td><td class="col-score-group"><span class="ctag ct-present">3.5</span></td><td class="col-score-group"><span class="ctag ct-penalty">P</span></td>
+    <td class="col-group-left sensor-cell">No consumer sensor available</td>
+    <td class="col-group-left mono dash">—</td><td class="mono dash">—</td>
+    <td class="col-group-left mono dash">—</td><td class="mono dash">—</td>
+    <td><span class="badge b-no">No</span></td>
+    <td class="col-group-left"><span class="s-na">N/A</span></td>
+  </tr>
+
+  <!-- PM2.5 -->
+  <tr>
+    <td class="total-score">39.0</td>
+    <td class="name-cell">Particulate matter (PM2.5)</td>
+    <td class="col-group-left col-score-group"><span class="ctag ct-penalty">P</span></td><td class="col-score-group"><span class="ctag ct-penalty">P</span></td><td class="col-score-group"><span class="ctag ct-c3ok">−</span></td><td class="col-score-group"><span class="ctag ct-present">6</span></td><td class="col-score-group"><span class="ctag ct-penalty">P</span></td><td class="col-score-group"><span class="ctag ct-penalty">P</span></td>
+    <td class="col-group-left sensor-cell">Laser OPC (Plantower PMS, Sensirion SPS30)</td>
+    <td class="col-group-left mono"><span class="dlo">+$2.50</span> / <span class="dhi">+$6.00</span></td><td class="mono">$16.73 / $20.23</td>
+    <td class="col-group-left"><div class="margin-wrap"><div class="margin-val">70.3% / 64.1%</div><div class="margin-delta">−4.5 to −10.7 pts</div><div class="bar-track"><div class="bar-fill" style="width:70.3%;background:#2A9D8F"></div></div></div></td>
+    <td><div class="margin-wrap"><div class="margin-val">81.0% / 77.0%</div><div class="margin-delta">−2.8 to −6.8 pts</div><div class="bar-track"><div class="bar-fill" style="width:81.0%;background:#2A9D8F"></div></div></div></td>
+    <td><span class="badge b-yes">Yes</span></td>
+    <td class="col-group-left"><span class="stars s3">★★★</span></td>
+  </tr>
+
+  <!-- Divider: Remaining -->
+  <tr class="divider"><td colspan="15">▸ &nbsp; Remaining substances &nbsp; (scores 40.0 – 48.0)</td></tr>
+
+  <!-- Water hardness -->
+  <tr class="part-row">
+    <td class="total-score mono" style="color:var(--part-text)">40.0</td>
+    <td class="name-cell">Water hardness / mineral scaling</td>
+    <td class="col-group-left col-score-group"><span class="ctag ct-penalty">P</span></td><td class="col-score-group"><span class="ctag ct-penalty">P</span></td><td class="col-score-group"><span class="ctag ct-c3ok">−</span></td><td class="col-score-group"><span class="ctag ct-present">10</span></td><td class="col-score-group"><span class="ctag ct-penalty">P</span></td><td class="col-score-group"><span class="ctag ct-present">2.5</span></td>
+    <td class="col-group-left sensor-cell">TDS / conductivity (inline — Shutoff device)</td>
+    <td class="col-group-left mono"><span class="dlo">+$1.00</span> / <span class="dhi">+$3.00</span></td><td class="mono">$15.23 / $17.23</td>
+    <td class="col-group-left"><div class="margin-wrap"><div class="margin-val">73.0% / 69.4%</div><div class="margin-delta">−1.8 to −5.4 pts</div><div class="bar-track"><div class="bar-fill" style="width:73%;background:#2A9D8F"></div></div></div></td>
+    <td><div class="margin-wrap"><div class="margin-val">82.7% / 80.4%</div><div class="margin-delta">−1.1 to −3.4 pts</div><div class="bar-track"><div class="bar-fill" style="width:82.7%;background:#2A9D8F"></div></div></div></td>
+    <td><span class="badge b-part">Partial</span></td>
+    <td class="col-group-left"><span class="stars s3">★★★</span></td>
+  </tr>
+
+  <!-- Flood zone -->
+  <tr class="part-row">
+    <td class="total-score mono" style="color:var(--part-text)">40.5</td>
+    <td class="name-cell">Flood zone / sump pump failure</td>
+    <td class="col-group-left col-score-group"><span class="ctag ct-penalty">P</span></td><td class="col-score-group"><span class="ctag ct-penalty">P</span></td><td class="col-score-group"><span class="ctag ct-c3ok">−</span></td><td class="col-score-group"><span class="ctag ct-penalty">P</span></td><td class="col-score-group"><span class="ctag ct-penalty">P</span></td><td class="col-score-group"><span class="ctag ct-present">2</span></td>
+    <td class="col-group-left sensor-cell">Firmware extension / float switch accessory</td>
+    <td class="col-group-left mono"><span class="dlo">$0.00</span> / <span class="dhi">+$2.00</span></td><td class="mono">$14.23 / $16.23</td>
+    <td class="col-group-left"><div class="margin-wrap"><div class="margin-val">74.8% / 71.2%</div><div class="margin-delta">0 to −3.6 pts</div><div class="bar-track"><div class="bar-fill" style="width:74.8%;background:#1E7A4E"></div></div></div></td>
+    <td><div class="margin-wrap"><div class="margin-val">83.8% / 81.6%</div><div class="margin-delta">0 to −2.2 pts</div><div class="bar-track"><div class="bar-fill" style="width:83.8%;background:#1E7A4E"></div></div></div></td>
+    <td><span class="badge b-part">Partial</span></td>
+    <td class="col-group-left"><span class="stars s4">★★★★</span></td>
+  </tr>
+
+  <!-- Efflorescence - infeasible -->
+  <tr class="inf-row">
+    <td class="total-score mono" style="color:var(--inf-text)">41.0</td>
+    <td class="name-cell">Efflorescence / water migration</td>
+    <td class="col-group-left col-score-group"><span class="ctag ct-present">8</span></td><td class="col-score-group"><span class="ctag ct-penalty">P</span></td><td class="col-score-group"><span class="ctag ct-c3ok">−</span></td><td class="col-score-group"><span class="ctag ct-penalty">P</span></td><td class="col-score-group"><span class="ctag ct-penalty">P</span></td><td class="col-score-group"><span class="ctag ct-penalty">P</span></td>
+    <td class="col-group-left sensor-cell">No direct sensor — proxy only</td>
+    <td class="col-group-left mono dash">—</td><td class="mono dash">—</td>
+    <td class="col-group-left mono dash">—</td><td class="mono dash">—</td>
+    <td><span class="badge b-no">No</span></td>
+    <td class="col-group-left"><span class="s-na">N/A</span></td>
+  </tr>
+
+  <!-- Chronic CO -->
+  <tr>
+    <td class="total-score">42.0</td>
+    <td class="name-cell">Chronic low-level CO</td>
+    <td class="col-group-left col-score-group"><span class="ctag ct-penalty">P</span></td><td class="col-score-group"><span class="ctag ct-present">4</span></td><td class="col-score-group"><span class="ctag ct-present">12</span></td><td class="col-score-group"><span class="ctag ct-penalty">P</span></td><td class="col-score-group"><span class="ctag ct-present">0.5</span></td><td class="col-score-group"><span class="ctag ct-present">3.5</span></td>
+    <td class="col-group-left sensor-cell">High-sensitivity electrochemical CO</td>
+    <td class="col-group-left mono"><span class="dlo">+$5.00</span> / <span class="dhi">+$12.00</span></td><td class="mono">$19.23 / $26.23</td>
+    <td class="col-group-left"><div class="margin-wrap"><div class="margin-val">65.9% / 53.5%</div><div class="margin-delta">−8.9 to −21.3 pts</div><div class="bar-track"><div class="bar-fill" style="width:65.9%;background:#BA7517"></div></div></div></td>
+    <td><div class="margin-wrap"><div class="margin-val">78.1% / 70.2%</div><div class="margin-delta">−5.7 to −13.6 pts</div><div class="bar-track"><div class="bar-fill" style="width:78.1%;background:#BA7517"></div></div></div></td>
+    <td><span class="badge b-yes">Yes</span></td>
+    <td class="col-group-left"><span class="stars s2">★★</span></td>
+  </tr>
+
+  <!-- PFAS - infeasible -->
+  <tr class="inf-row">
+    <td class="total-score mono" style="color:var(--inf-text)">42.0</td>
+    <td class="name-cell">PFAS in water</td>
+    <td class="col-group-left col-score-group"><span class="ctag ct-penalty">P</span></td><td class="col-score-group"><span class="ctag ct-present">5</span></td><td class="col-score-group"><span class="ctag ct-present">11</span></td><td class="col-score-group"><span class="ctag ct-penalty">P</span></td><td class="col-score-group"><span class="ctag ct-present">2.5</span></td><td class="col-score-group"><span class="ctag ct-present">1.5</span></td>
+    <td class="col-group-left sensor-cell">No consumer sensor — lab only</td>
+    <td class="col-group-left mono dash">—</td><td class="mono dash">—</td>
+    <td class="col-group-left mono dash">—</td><td class="mono dash">—</td>
+    <td><span class="badge b-no">No</span></td>
+    <td class="col-group-left"><span class="s-na">N/A</span></td>
+  </tr>
+
+  <!-- Asbestos - infeasible -->
+  <tr class="inf-row">
+    <td class="total-score mono" style="color:var(--inf-text)">42.0</td>
+    <td class="name-cell">Asbestos</td>
+    <td class="col-group-left col-score-group"><span class="ctag ct-present">2</span></td><td class="col-score-group"><span class="ctag ct-penalty">P</span></td><td class="col-score-group"><span class="ctag ct-present">7</span></td><td class="col-score-group"><span class="ctag ct-penalty">P</span></td><td class="col-score-group"><span class="ctag ct-penalty">P</span></td><td class="col-score-group"><span class="ctag ct-penalty">P</span></td>
+    <td class="col-group-left sensor-cell">No direct sensor feasible</td>
+    <td class="col-group-left mono dash">—</td><td class="mono dash">—</td>
+    <td class="col-group-left mono dash">—</td><td class="mono dash">—</td>
+    <td><span class="badge b-no">No</span></td>
+    <td class="col-group-left"><span class="s-na">N/A</span></td>
+  </tr>
+
+  <!-- Pest damage rodents -->
+  <tr class="part-row">
+    <td class="total-score mono" style="color:var(--part-text)">43.0</td>
+    <td class="name-cell">Pest damage (rodents)</td>
+    <td class="col-group-left col-score-group"><span class="ctag ct-present">10</span></td><td class="col-score-group"><span class="ctag ct-penalty">P</span></td><td class="col-score-group"><span class="ctag ct-c3ok">−</span></td><td class="col-score-group"><span class="ctag ct-penalty">P</span></td><td class="col-score-group"><span class="ctag ct-penalty">P</span></td><td class="col-score-group"><span class="ctag ct-penalty">P</span></td>
+    <td class="col-group-left sensor-cell">PIR motion / acoustic</td>
+    <td class="col-group-left mono"><span class="dlo">+$1.50</span> / <span class="dhi">+$5.00</span></td><td class="mono">$15.73 / $19.23</td>
+    <td class="col-group-left"><div class="margin-wrap"><div class="margin-val">72.1% / 65.9%</div><div class="margin-delta">−2.7 to −8.9 pts</div><div class="bar-track"><div class="bar-fill" style="width:72.1%;background:#BA7517"></div></div></div></td>
+    <td><div class="margin-wrap"><div class="margin-val">82.1% / 78.1%</div><div class="margin-delta">−1.7 to −5.7 pts</div><div class="bar-track"><div class="bar-fill" style="width:82.1%;background:#BA7517"></div></div></div></td>
+    <td><span class="badge b-part">Partial</span></td>
+    <td class="col-group-left"><span class="stars s3">★★★</span></td>
+  </tr>
+
+  <!-- VOCs furnishings -->
+  <tr>
+    <td class="total-score">43.0</td>
+    <td class="name-cell">VOCs from new furnishings</td>
+    <td class="col-group-left col-score-group"><span class="ctag ct-penalty">P</span></td><td class="col-score-group"><span class="ctag ct-present">10</span></td><td class="col-score-group"><span class="ctag ct-c3ok">−</span></td><td class="col-score-group"><span class="ctag ct-penalty">P</span></td><td class="col-score-group"><span class="ctag ct-penalty">P</span></td><td class="col-score-group"><span class="ctag ct-penalty">P</span></td>
+    <td class="col-group-left sensor-cell">Metal oxide MOX (same hardware as VOCs broad)</td>
+    <td class="col-group-left mono"><span class="dlo">+$1.50</span> / <span class="dhi">+$4.00</span></td><td class="mono">$15.73 / $18.23</td>
+    <td class="col-group-left"><div class="margin-wrap"><div class="margin-val">72.1% / 67.7%</div><div class="margin-delta">−2.7 to −7.1 pts</div><div class="bar-track"><div class="bar-fill" style="width:72.1%;background:#2A9D8F"></div></div></div></td>
+    <td><div class="margin-wrap"><div class="margin-val">82.1% / 79.3%</div><div class="margin-delta">−1.7 to −4.5 pts</div><div class="bar-track"><div class="bar-fill" style="width:82.1%;background:#2A9D8F"></div></div></div></td>
+    <td><span class="badge b-yes">Yes</span></td>
+    <td class="col-group-left"><span class="stars s3">★★★</span></td>
+  </tr>
+
+  <!-- Mold spore OPC -->
+  <tr>
+    <td class="total-score">43.0</td>
+    <td class="name-cell">Mold spore / air quality monitoring</td>
+    <td class="col-group-left col-score-group"><span class="ctag ct-penalty">P</span></td><td class="col-score-group"><span class="ctag ct-penalty">P</span></td><td class="col-score-group"><span class="ctag ct-c3ok">−</span></td><td class="col-score-group"><span class="ctag ct-penalty">P</span></td><td class="col-score-group"><span class="ctag ct-penalty">P</span></td><td class="col-score-group"><span class="ctag ct-present">4.5</span></td>
+    <td class="col-group-left sensor-cell">Optical particle counter (OPC)</td>
+    <td class="col-group-left mono"><span class="dlo">+$4.00</span> / <span class="dhi">+$10.00</span></td><td class="mono">$18.23 / $24.23</td>
+    <td class="col-group-left"><div class="margin-wrap"><div class="margin-val">67.7% / 57.0%</div><div class="margin-delta">−7.1 to −17.8 pts</div><div class="bar-track"><div class="bar-fill" style="width:67.7%;background:#BA7517"></div></div></div></td>
+    <td><div class="margin-wrap"><div class="margin-val">79.3% / 72.5%</div><div class="margin-delta">−4.5 to −11.3 pts</div><div class="bar-track"><div class="bar-fill" style="width:79.3%;background:#BA7517"></div></div></div></td>
+    <td><span class="badge b-yes">Yes</span></td>
+    <td class="col-group-left"><span class="stars s2">★★</span></td>
+  </tr>
+
+  <!-- Dust mite - infeasible -->
+  <tr class="inf-row">
+    <td class="total-score mono" style="color:var(--inf-text)">43.5</td>
+    <td class="name-cell">Dust mite allergen</td>
+    <td class="col-group-left col-score-group"><span class="ctag ct-penalty">P</span></td><td class="col-score-group"><span class="ctag ct-present">9</span></td><td class="col-score-group"><span class="ctag ct-present">6</span></td><td class="col-score-group"><span class="ctag ct-penalty">P</span></td><td class="col-score-group"><span class="ctag ct-present">1</span></td><td class="col-score-group"><span class="ctag ct-penalty">P</span></td>
+    <td class="col-group-left sensor-cell">No continuous sensor exists</td>
+    <td class="col-group-left mono dash">—</td><td class="mono dash">—</td>
+    <td class="col-group-left mono dash">—</td><td class="mono dash">—</td>
+    <td><span class="badge b-no">No</span></td>
+    <td class="col-group-left"><span class="s-na">N/A</span></td>
+  </tr>
+
+  <!-- Soil gas -->
+  <tr>
+    <td class="total-score">44.5</td>
+    <td class="name-cell">Soil gas intrusion</td>
+    <td class="col-group-left col-score-group"><span class="ctag ct-penalty">P</span></td><td class="col-score-group"><span class="ctag ct-present">7</span></td><td class="col-score-group"><span class="ctag ct-present">8</span></td><td class="col-score-group"><span class="ctag ct-penalty">P</span></td><td class="col-score-group"><span class="ctag ct-present">4.5</span></td><td class="col-score-group"><span class="ctag ct-present">3</span></td>
+    <td class="col-group-left sensor-cell">Electrochemical H2S + catalytic bead CH4</td>
+    <td class="col-group-left mono"><span class="dlo">+$6.00</span> / <span class="dhi">+$14.00</span></td><td class="mono">$20.23 / $28.23</td>
+    <td class="col-group-left"><div class="margin-wrap"><div class="margin-val">64.1% / 49.9%</div><div class="margin-delta">−10.7 to −24.9 pts</div><div class="bar-track"><div class="bar-fill" style="width:64.1%;background:#BA7517"></div></div></div></td>
+    <td><div class="margin-wrap"><div class="margin-val">77.0% / 67.9%</div><div class="margin-delta">−6.8 to −15.9 pts</div><div class="bar-track"><div class="bar-fill" style="width:77.0%;background:#BA7517"></div></div></div></td>
+    <td><span class="badge b-yes">Yes</span></td>
+    <td class="col-group-left"><span class="stars s2">★★</span></td>
+  </tr>
+
+  <!-- Mold firmware -->
+  <tr class="fw-row">
+    <td class="total-score fw">46.5</td>
+    <td class="name-cell">Mold (colonization/hidden/airborne)</td>
+    <td class="col-group-left col-score-group"><span class="ctag ct-present">1</span></td><td class="col-score-group"><span class="ctag ct-fn">FN</span></td><td class="col-score-group"><span class="ctag ct-present">14</span></td><td class="col-score-group"><span class="ctag ct-fn">FN</span></td><td class="col-score-group"><span class="ctag ct-present">4</span></td><td class="col-score-group"><span class="ctag ct-fn">FN</span></td>
+    <td class="col-group-left sensor-cell">Humidity + temp + VOC proxy — firmware only</td>
+    <td class="col-group-left mono">$0.00</td><td class="mono">$14.23</td>
+    <td class="col-group-left mono">74.8%</td><td class="mono">83.8%</td>
+    <td><span class="badge b-fw">FW</span></td>
+    <td class="col-group-left"><span class="stars s4">★★★★</span></td>
+  </tr>
+
+  <!-- Termites -->
+  <tr class="part-row">
+    <td class="total-score high">48.0</td>
+    <td class="name-cell">Termites</td>
+    <td class="col-group-left col-score-group"><span class="ctag ct-present">4</span></td><td class="col-score-group"><span class="ctag ct-penalty">P</span></td><td class="col-score-group"><span class="ctag ct-present">15</span></td><td class="col-score-group"><span class="ctag ct-penalty">P</span></td><td class="col-score-group"><span class="ctag ct-present">3</span></td><td class="col-score-group"><span class="ctag ct-present">4</span></td>
+    <td class="col-group-left sensor-cell">Acoustic / vibrational (MEMS mic / piezo)</td>
+    <td class="col-group-left mono"><span class="dlo">+$8.00</span> / <span class="dhi">+$20.00</span></td><td class="mono">$22.23 / $34.23</td>
+    <td class="col-group-left"><div class="margin-wrap"><div class="margin-val">60.6% / 39.3%</div><div class="margin-delta">−14.2 to −35.5 pts</div><div class="bar-track"><div class="bar-fill" style="width:60.6%;background:#C0392B"></div></div></div></td>
+    <td><div class="margin-wrap"><div class="margin-val">74.7% / 61.1%</div><div class="margin-delta">−9.1 to −22.7 pts</div><div class="bar-track"><div class="bar-fill" style="width:74.7%;background:#C0392B"></div></div></div></td>
+    <td><span class="badge b-part">Partial</span></td>
+    <td class="col-group-left"><span class="stars s1">★</span></td>
+  </tr>
+
+  </tbody>
+</table>
+</div>
+
+<div class="footer">
+  <span><strong>Column scores:</strong></span>
+  <span>P = absence penalty applied</span>
+  <span class="sep">·</span>
+  <span>− = no penalty (C3 absence is a positive trait)</span>
+  <span class="sep">·</span>
+  <span>FN = Flo-native, all penalties waived</span>
+  <span class="sep">·</span>
+  <span>Penalties: C1=11, C2=11, C3=none, C4=11, C5=5.5, C6=5.5</span>
+  <span class="sep">&nbsp;&nbsp;|&nbsp;&nbsp;</span>
+  <span><strong>COGS viability:</strong></span>
+  <span style="color:var(--stars-4)">★★★★</span> &lt;15% COGS delta
+  <span class="sep">·</span>
+  <span style="color:var(--stars-3)">★★★</span> 15–50%
+  <span class="sep">·</span>
+  <span style="color:var(--stars-2)">★★</span> 50–100%
+  <span class="sep">·</span>
+  <span style="color:var(--stars-1)">★</span> &gt;100%
+  <span class="sep">·</span>
+  N/A = not sensor-addressable
+</div>
+
+</body>
+</html>
